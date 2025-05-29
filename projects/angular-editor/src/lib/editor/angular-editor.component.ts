@@ -205,6 +205,51 @@ export class AngularEditorComponent implements OnInit, ControlValueAccessor, Aft
   }
 
   /**
+   *  cuts html content until maxLength parameter, trying to cut delete html labels, just text
+   */
+  truncateHtmlContent(rootElement: HTMLElement, maxLength: number): string {
+    let charCount = 0;
+
+    // Clone the node to avoid modifying the original DOM
+    const cloned = rootElement.cloneNode(true) as HTMLElement;
+
+    const truncateNode = (node: Node): boolean => {
+      if (charCount >= maxLength) return true;
+
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        const remaining = maxLength - charCount;
+
+        if (text.length > remaining) {
+          node.textContent = text.substring(0, remaining);
+          charCount = maxLength;
+          return true;
+        } else {
+          charCount += text.length;
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+          if (truncateNode(child)) {
+            // Remove any siblings after the truncated child
+            while (child.nextSibling) {
+              node.removeChild(child.nextSibling);
+            }
+            return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
+    truncateNode(cloned);
+
+    return cloned.innerHTML;
+  }
+
+
+  /**
    * Executed from the contenteditable section while the input property changes
    * @param element html element from contenteditable
    */
@@ -212,6 +257,21 @@ export class AngularEditorComponent implements OnInit, ControlValueAccessor, Aft
     let html = '';
     if (this.modeVisual) {
       html = element.innerHTML;
+      if (this.config.maxLength) {
+        const currentText = element.innerText;
+        if(currentText.length > this.config.maxLength){
+          // Recorta el texto al límite
+          element.innerHTML = this.truncateHtmlContent(element, this.config.maxLength);
+          // Coloca el cursor al final (opcional)
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.selectNodeContents(element);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+          return;
+        }
+      }
     } else {
       html = element.innerText;
     }
